@@ -1,0 +1,1249 @@
+---
+title: "Main Code for for BD3P5 Lab Test - Group 4"
+output:
+  html_document:
+    df_print: paged
+---
+
+The members of Group 4 are:
+20BDA01   -   Tashi Chotso
+20BDA06   -   Sarah Merin John
+20BDA21   -   Joel Bharat Monis
+20BDA42   -   Aishwarya Nair
+20BDA65   -   Bartolomeu Carvalho 
+20BDA66   -   Alex Paul Padmanadan
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# Read Libraries
+library(dplyr)
+library(readr)
+library(lubridate) # Working with Dates
+library(reshape)
+library(reshape2)# Reshaping the data
+library(tidyr)
+library(tidyverse)
+library(data.table)
+library(zoo) ## datetime
+library(bizdays) # business day
+library(ggeasy) # for easy ggplot editing
+library(harrypotter) # for palettes
+library(tsibble)
+library(timeDate)
+library(readxl)
+library(tsibbledata)
+library(magrittr)
+library(fpp3)
+library(feasts)
+library(latex2exp)
+library(slider)
+library(fUnitRoots)
+library(urca)
+library(forecast)
+library("writexl")
+library(nnfor)
+## Visualizations
+library(ggplot2)
+library(plotly)
+library(MASS)
+```
+
+
+### Loading Data and Univariate Analysis
+```{r include=FALSE}
+dat_train = data.frame(read.csv("train.csv"))
+
+```
+
+# 1. Data Integrity / Quality
+
+### Checking Structure and Summary of the data
+```{r echo=TRUE}
+str(dat_train)
+summary(dat_train)
+```
+
+### Dimension of the dataset
+```{r}
+dim(dat_train)
+```
+
+
+
+### Converting applicant date into relevant date format.
+
+```{r}
+dat_train$application_date<-as.Date(dat_train$application_date,format = "%d-%m-%Y")
+
+dat_train$segment<-as.character(dat_train$segment)
+
+str(dat_train)
+
+```
+
+
+
+
+
+
+# 2. Feature Engineering
+
+```{r}
+dat_train$Day<-format(dat_train$application_date,"%d")
+dat_train$WeekOfDay = format(dat_train$application_date, format = "%a") ## Getting days of week
+dat_train$Weekly = week(dat_train$application_date) #Getting the week of date
+dat_train$Month<-format(dat_train$application_date,"%b")
+dat_train$Year<-format(dat_train$application_date,"%Y")
+dat_train$MonYr = format(dat_train$application_date, "%b-%Y") #Extracting yearly
+dat_train$YearQtr = as.character(as.yearqtr(dat_train$application_date))#Extracting quarterly
+dat_train$Qtr = as.character(quarters(dat_train$application_date))#Extracting quarterly
+```
+
+
+
+
+```{r}
+dat_train
+```
+
+
+
+
+
+```{r include=FALSE}
+#Attaching data
+df_segment1 <- dat_train %>% dplyr::filter(segment == 1)
+df_segment2 <- dat_train %>% dplyr::filter(segment == 2)
+```
+
+
+# 3. </b>Visualisation</b>
+
+
+
+```{r}
+#segment1
+ggplot(df_segment1,aes (x=reorder(state,no_of_applicants),
+              y=no_of_applicants)) + geom_bar(stat="summary",fun="sum", width=0.5, fill = "Blue")+
+  labs(x="state",y = "no_of_applicants", fill="state") +
+  ggtitle("Total Applicants by State in Segment 1 ")+
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=60,hjust=1))
+
+#segment2
+ggplot(df_segment2,aes (x=reorder(state ,no_of_applicants),
+              y=no_of_applicants)) + geom_bar(stat="summary",fun="sum", width=0.5, fill = "Blue")+
+  labs(x="state",y = "no_of_applicants", fill="state") +
+  ggtitle("Total Applicants by State in Segment 2")+
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=60,hjust=1))
+```
+
+##### In segment 1, Maharashtra accounts for a high number of applicants, followed by Gujarat and West Bengal.In segment 2, Tamil Nadu accounts for a majority of applicants.
+
+
+
+
+```{r}
+mdl_dt<-dat_train[,c("segment","application_date","no_of_applicants")]
+```
+
+
+```{r}
+mdl_dt<-dat_train[,c("segment","application_date","no_of_applicants")]
+cs_trend<-mdl_dt%>%group_by(segment,application_date)%>%summarise(No_cases = sum(no_of_applicants),.groups='drop')
+
+ggplot(data=na.omit(cs_trend),aes(x = application_date,y = No_cases,color = segment))+geom_line(stat = "identity")+labs(title = "Trend of Applications by Segment")+scale_x_date(date_labels = "%b-%Y")+facet_grid(segment~.,scale = "free")
+
+```
+
+##### Here we plot the trend of segment 1 and segment 2 w.r.t No of applicants across the years.The segments differ from each other; Segment 2 seems to indicate a cyclic trend, whereas segment 1 exhibits substantial peaks initially, based on a steady underlying trend.
+
+```{r}
+segment17<-df_segment1 %>%
+               dplyr::filter(Year==2017)
+aggData <- aggregate(x =segment17$`no_of_applicants`,
+                     by=list(state_wise = segment17$state),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = state_wise, y = prop.table(stat(aggData$x)), fill = state_wise, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 2) + 
+  scale_y_continuous(labels = scales::percent) + 
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=60,hjust=1))+
+  labs(x = 'state', y = 'percentage of applicants', fill = 'state_wise') + 
+  ggtitle("Percentage of Applicants -Segment 1 (2017)")
+```
+
+
+```{r}
+#2018
+segment18<-df_segment1 %>%
+               dplyr::filter(Year==2018)
+aggData <- aggregate(x =segment18$`no_of_applicants`,
+                     by=list(state_wise = segment18$state),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = state_wise, y = prop.table(stat(aggData$x)), fill = state_wise, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 2) + 
+  scale_y_continuous(labels = scales::percent) + 
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=60,hjust=1))+
+  labs(x = 'state', y = 'percentage of applicants', fill = 'stae_wise') + 
+  ggtitle("Percentage of Applicants -Segment 1 (2018)")
+```
+
+```{r}
+#2019
+segment19<-df_segment1 %>%
+               dplyr::filter(Year==2019)
+aggData <- aggregate(x =segment19$`no_of_applicants`,
+                     by=list(state_wise = segment19$state),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = state_wise, y = prop.table(stat(aggData$x)), fill = state_wise, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 2) + 
+  scale_y_continuous(labels = scales::percent) + 
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=60,hjust=1))+
+  labs(x = 'state', y = 'percentage of applicants', fill = 'state_wise') + 
+  ggtitle("Percentage of Applicants -Segment 1 (2019)")
+```
+
+##### While looking for any major contributors for applicants in segment 1, no significant is change is observed through the years, with Delhi being the major contributor for all three years.
+
+
+```{r}
+p17<-df_segment2 %>%
+               dplyr::filter(Year==2017)
+aggData <- aggregate(x =p17$`no_of_applicants`,
+                     by=list(state_wise = p17$state),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = state_wise, y = prop.table(stat(aggData$x)), fill = state_wise, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 2) + 
+  scale_y_continuous(labels = scales::percent) + 
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=60,hjust=1))+
+  labs(x = 'state', y = 'percentage of applicants') + 
+  ggtitle("Percentage of Applicants segment 2 (2017)")
+```
+
+##### For 2017 Tamil Nadu, Orissa and West Bengal contributed to over 60% of applications for segment 2
+
+
+
+
+```{r}
+#2018
+p18<-df_segment2 %>%
+               dplyr::filter(Year==2018)
+aggData <- aggregate(x =p18$`no_of_applicants`,
+                     by=list(state_wise = p18$state),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = state_wise, y = prop.table(stat(aggData$x)), fill = state_wise, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 2) + 
+  scale_y_continuous(labels = scales::percent) + 
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=60,hjust=1))+
+  labs(x = 'state', y = 'percentage of applicants', fill = 'state_wise') + 
+  ggtitle("Percentage of Applicants segment 2 (2018)")
+```
+
+##### Applications for outlier states like Orissa and West Bengal decreased in 2018, while Tamil Nadu remained steady
+
+```{r}
+#2019
+p19<-df_segment2 %>%
+               dplyr::filter(Year==2019)
+aggData <- aggregate(x =p19$`no_of_applicants`,
+                     by=list(state_wise = p19$state),
+                     FUN = mean)
+ggplot(data = aggData, aes(x = state_wise, y = prop.table(stat(aggData$x)), fill = state_wise, label = scales::percent(prop.table(stat(aggData$x))))) +
+  geom_bar(stat="identity", position = "dodge") + 
+  geom_text(stat = 'identity', position = position_dodge(.9),  vjust = -0.5, size = 2) + 
+  scale_y_continuous(labels = scales::percent) + 
+  theme_bw()+
+  theme(axis.text.x=element_text(angle=60,hjust=1))+
+  labs(x = 'state', y = 'percentage of applicants', fill = 'state_wise') + 
+  ggtitle("Percentage of Applicants -Segment 2 (2019)")
+```
+
+
+##### Segment 2 shows no significant change between 2018 and 2019, except for Orissa dropping to half its value of the previous year.
+
+
+```{r}
+#segment 1
+
+level_orderM<-c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec") 
+month_summary <-df_segment1 %>% 
+                    group_by(Month) %>%
+                    summarise(no_of_applicants= sum(no_of_applicants),.groups='drop') 
+month_summary %>%
+         ggplot(aes(x =factor(Month,level=level_orderM), y = no_of_applicants, fill = Month)) +
+         geom_col() +
+         scale_fill_hp_d(option = "Slytherin") +
+         scale_y_continuous(limits = c(0, 300000), expand = c(0,0)) +
+         labs(title = "Total number of applicants in  each month in segment 1", x = "Month", y = "Total applicants") 
+          
+```
+
+##### This graph shows the distribution of number of applicants in each month over the period of three years under consideration for segment 1. Over a span of three years, Oct month shows a peak in applicants for segment 1.
+
+```{r}
+#segment2
+
+level_orderM<-c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec") 
+month_summary <-df_segment2 %>% 
+                    group_by(Month) %>%
+                    summarise(no_of_applicants= sum(no_of_applicants),.groups='drop') 
+month_summary %>%
+         ggplot(aes(x =factor(Month,level=level_orderM), y = no_of_applicants, fill = Month)) +
+         geom_col() +
+         scale_fill_hp_d(option = "Slytherin") +
+         scale_y_continuous(limits = c(0, 1250000), expand = c(0,0)) +
+         labs(title = "Total number of applicants in  each month in segment 2", x = "Month", y = "Total applicants") 
+          
+```
+
+##### This graph shows the distribution of no of applicants in each month over the period of three years under consideration for segment 2. The count of applicants in segment 2 for each month is approximately the same barring slight increase in Mar, May and Jun.
+
+
+```{r}
+
+wday_summary <- df_segment1 %>% 
+                group_by(YearQtr) %>%
+                summarise(no_of_applicants = sum(no_of_applicants),.groups='drop') 
+wday_summary %>%
+  ggplot(aes(x =YearQtr ,y = no_of_applicants, fill = YearQtr)) +
+  geom_col() +
+  scale_fill_hp_d(option = "Ravenclaw") +
+  scale_y_continuous(limits = c(0, 400000), expand = c(0,0)) +
+  labs(title = "Total segment 1 applicants by quarter",x = "Quarter")
+   
+```
+
+##### Here we notice a clear uptick in applicants in the neighbourhood of 2018 4th quarter
+
+
+```{r}
+# segment2
+level_orderD<-c("Mon","Tue","Wed","Thu","Fri","Sat","Sun") 
+wday_summary <- df_segment2 %>% 
+                group_by(YearQtr) %>%
+                summarise(no_of_applicants = sum(no_of_applicants),.groups='drop') 
+wday_summary %>%
+  ggplot(aes(x =YearQtr ,y = no_of_applicants, fill = YearQtr)) +
+  geom_col() +
+  scale_fill_hp_d(option = "DracoMalfoy") +
+  scale_y_continuous(limits = c(0, 2000000), expand = c(0,0)) +
+  labs(title = "Total segment 2 applicants by quarter",x = "Quarterly")
+     
+ 
+```
+
+##### Segment 2 shows a similar trend, with an uptick in 2018 Q2 and 2019 Q1.
+
+
+```{r}
+level_orderD<-c("Mon","Tue","Wed","Thu","Fri","Sat","Sun") 
+wday_summary <- df_segment1 %>% 
+                group_by(WeekOfDay) %>%
+                summarise(no_of_applicants = mean(no_of_applicants),.groups='drop') 
+wday_summary %>%
+  ggplot(aes(x =factor(WeekOfDay,level=level_orderD) ,y = no_of_applicants, fill = WeekOfDay)) +
+  geom_col() +
+  scale_fill_hp_d(option = "HermioneGranger") +
+  scale_y_continuous(limits = c(0, 40), expand = c(0,0)) +
+  labs(title = "Avg applicants by the day of the week - Segment 1",x = "Days of Week")
+   
+```
+
+##### On an average, Mondays and Wednesdays get more number of applicants for segment 1, which can be seen in the Prophet Model (Python notebook) also.
+
+```{r}
+level_orderD<-c("Mon","Tue","Wed","Thu","Fri","Sat","Sun") 
+wday_summary <- df_segment2 %>% 
+                group_by(WeekOfDay) %>%
+                summarise(no_of_applicants = mean(no_of_applicants),.groups='drop') 
+wday_summary %>%
+  ggplot(aes(x =factor(WeekOfDay,level=level_orderD) ,y = no_of_applicants, fill = WeekOfDay)) +
+  geom_col() +
+  scale_fill_hp_d(option = "HermioneGranger") +
+  scale_y_continuous(limits = c(0, 1250), expand = c(0,0)) +
+  labs(title = "Avg applicants by the day of the week - Segment 2",x = "Days of Week")
+   
+```
+
+##### But segment 2 applicants show no such preferance for any day of the week. The same behaviour can be seen in the Prophet Model (Python notebook) also.
+
+```{r}
+
+level_orderD<-c("Mon","Tue","Wed","Thu","Fri","Sat","Sun") 
+level_orderM<-c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec") 
+wday_month_summary <- df_segment1 %>% 
+  group_by(WeekOfDay, Month) %>%
+  summarise(mean_applicants = mean(no_of_applicants),.groups='drop')
+wday_month_summary %>%
+  ggplot(aes(x = factor(WeekOfDay,level=level_orderD), y = mean_applicants, fill = WeekOfDay)) +
+  geom_col(width =1)+
+ scale_fill_hp_d(option = "DracoMalfoy") +
+  facet_wrap(~Month,dir="v",ncol=3,nrow= 4,as.table = TRUE) +
+  scale_y_continuous(limits = c(0, 80), expand = c(0,0)) +
+  labs(title = "Avg applicants through the week in every  month", 
+       x = "Week Of Day", y = "total applicants" ) 
+```
+
+##### As is consistent with the previous observations, October appears to be busier than other months.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df_segment1 <- as_tsibble(df_segment1,
+index=application_date,
+key=c(segment, branch_id, state, zone))
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+df_segment2 <- as_tsibble(df_segment2,
+index=application_date,
+key=c(segment, state))
+```
+
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+monthly_view <- df_segment1 %>%
+group_by_key() %>%
+index_by(Year_Month = ~ yearmonth(.)) %>% # monthly aggregates
+summarise(
+Total_Applications = sum(no_of_applicants, na.rm = TRUE)
+)
+
+monthly_view1 <- monthly_view %>%
+group_by(zone) %>%
+index_by(Year_Month) %>% # monthly aggregates
+summarise(
+Total_Applications = sum(Total_Applications, na.rm = TRUE)
+)
+
+date_range = as.Date(c('01-03-2017','06-07-2019'), "%d-%m-%Y")
+fig <- plot_ly(monthly_view1, x=~Year_Month,
+y=~Total_Applications, color=~zone,
+type='scatter',
+mode='lines') %>%
+layout(title = 'Applications per month by Zone - Segment 1',
+xaxis = list(title = 'Months', range=date_range,
+ticktext=(as.character(monthly_view1[1:27,]$Year_Month)),
+tickvals=(monthly_view1[1:27,]$Year_Month),
+tickmode='array'),
+yaxis = list(title = 'Applicants'))
+fig
+```
+
+##### Here we see the zonewise applications per month.All the zones appear to move together, with the west zone showing most exaggerated movement.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+weekly_view2 <- df_segment2 %>%
+group_by_key() %>%
+index_by(Weekly = ~ week(.)) %>% # Weekly aggregates
+summarise(
+Total_Applications = sum(no_of_applicants, na.rm = TRUE)
+)
+
+weekly_view_2 <- weekly_view2 %>%
+group_by(state) %>%
+index_by(Weekly) %>% # Weekly aggregates
+summarise(
+Total_Applications = sum(Total_Applications, na.rm = TRUE)
+)
+
+date_range = as.Date(c('01-03-2017','06-07-2019'), "%d-%m-%Y")
+fig <- plot_ly(weekly_view_2, x=~Weekly,
+y=~Total_Applications, color=~state,
+type='scatter',
+mode='lines') %>%
+layout(title = 'Applications per week by State - Segment 2',
+xaxis = list(title = 'Weekly', range=date_range,
+ticktext=(as.character(weekly_view_2[1:53,]$Weekly)),
+tickvals=(weekly_view_2[1:53,]$Weekly),
+tickmode='array'),
+yaxis = list(title = 'Applicants'))
+fig
+```
+
+##### A weekly look at the No of applicants by state shows a seasonal trend, approximately every four weeks for segment 2.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+monthly_view <- df_segment1 %>%
+group_by_key() %>%
+index_by(Year_Month = ~ yearmonth(.)) %>% # monthly aggregates
+summarise(
+Total_Applications = sum(no_of_applicants, na.rm = TRUE)
+)
+
+monthly_view_1 <- monthly_view %>%
+group_by(state) %>%
+index_by(Year_Month) %>% # monthly aggregates
+summarise(
+Total_Applications = sum(Total_Applications, na.rm = TRUE)
+)
+
+date_range = as.Date(c('01-03-2017','06-07-2019'), "%d-%m-%Y")
+fig <- plot_ly(monthly_view_1, x=~Year_Month,
+y=~Total_Applications, color=~state,
+type='scatter',
+mode='lines') %>%
+layout(title = 'Monthly No of applicants by state-Segment 1',
+xaxis = list(title = 'Months', range=date_range,
+ticktext=(as.character(monthly_view1[1:27,]$Year_Month)),
+tickvals=(monthly_view_1[1:27,]$Year_Month),
+tickmode='array'),
+yaxis = list(title = 'Applicants'))
+fig
+```
+
+##### Most States appear to be steady except for minor variations with the exception of Maharashtra, West Bengal and Gujarat which shows sharp and marked variations.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+monthly_view2 <- df_segment2 %>%
+group_by_key() %>%
+index_by(Year_Month = ~ yearmonth(.)) %>% # monthly aggregates
+summarise(
+Total_Applications = sum(no_of_applicants, na.rm = TRUE)
+)
+
+monthly_view_2 <- monthly_view2 %>%
+group_by(state) %>%
+index_by(Year_Month) %>% # monthly aggregates
+summarise(
+Total_Applications = sum(Total_Applications, na.rm = TRUE)
+)
+
+date_range = as.Date(c('01-03-2017','06-07-2019'), "%d-%m-%Y")
+fig <- plot_ly(monthly_view_2, x=~Year_Month,
+y=~Total_Applications, color=~state,
+type='scatter',
+mode='lines') %>%
+layout(title = 'Monthly No of applicants by state-Segment 2',
+xaxis = list(title = 'Months', range=date_range,
+ticktext=(as.character(monthly_view1[1:27,]$Year_Month)),
+tickvals=(monthly_view_2[1:27,]$Year_Month),
+tickmode='array'),
+yaxis = list(title = 'Applicants'))
+fig
+```
+
+##### Most States appear to be steady except for minor variations with the exception of Tamil Nadu which shows the most variation.
+
+
+
+# Preparation of data for Time Series Visualisation and Forecasting
+
+Reading the raw train data, extracting segment 1 and 2 into separate dataframes and converting them into tsibbles.
+```{r}
+raw_train <- readr::read_csv("C:\\MSc (BDA)\\BD3P5 Econometrics lab test\\sjcbusinessforecasting\\train.csv")
+
+# Converting segment 1 raw data into consolidated
+raw_train %>% dplyr::filter(segment==1) %>%  dplyr::select (-c(branch_id,zone,state, segment))-> train_s1
+aggregate(train_s1$no_of_applicants, list(dmy(train_s1$application_date)), FUN=sum) -> train_s1_consol
+colnames(train_s1_consol) <- c("date", "no_of_applicants")
+train_s1_consol %>% mutate(date = as_date(date)) %>% as_tsibble(index = date) -> train_ts1
+train_ts1
+
+# Converting segment 2 raw data into consolidated
+raw_train %>% dplyr::filter(segment==2) %>%  dplyr::select (-c(branch_id,zone, segment))-> train_s2
+aggregate(train_s2$no_of_applicants, list(dmy(train_s2$application_date)), FUN=sum) -> train_s2_consol
+colnames(train_s2_consol) <- c("date", "no_of_applicants")
+train_s2_consol %>% mutate(date = as_date(date)) %>% as_tsibble(index = date) -> train_ts2
+train_ts2
+```
+
+# SEGMENT 1
+
+## Visualisation of segment 1 data
+```{r}
+train_ts1 %>% autoplot()
+
+train_ts1 %>% tsibble::fill_gaps(no_of_applicants = 0L) -> train_ts1
+
+train_ts1 %>% gg_season(no_of_applicants, labels = "both") +
+  labs(y = "no of applicants",
+       title = "Seasonal plot: No of applicants")
+
+train_ts1 %>% gg_season(no_of_applicants, period="month", labels = "both") +
+  labs(y = "no of applicants",
+       title = "Seasonal plot: No of applicants")
+
+```
+
+
+Time series components : STL decomposition
+```{r}
+# Times series decomposition using Loess
+dcmp <- train_ts1 %>%
+  model(stl = STL(no_of_applicants))
+components(dcmp)
+
+# Visualisation of the overall movement of the series ignoring any seasonality and fluctuations
+components(dcmp) %>%
+  as_tsibble() %>%
+  autoplot(no_of_applicants, colour="gray") +
+  geom_line(aes(y=trend), colour = "#D55E00") +
+  labs(
+    y = "No of applicants",
+    title = "Total no of applicants"
+  )
+
+#Plotting all of the components in a single figure
+components(dcmp) %>% autoplot()
+
+# Seasonally adjusted decomposition
+components(dcmp) %>%
+  as_tsibble() %>%
+  autoplot(no_of_applicants, colour = "gray") +
+  geom_line(aes(y=season_adjust), colour = "#0072B2") +
+  labs(y = "No of Applicants)",
+       title = "Number of applicants : Segment 1")
+
+#The original data is in grey and the seasonally adjusted no of applicants data is in blue.
+```
+
+Additive decomposition
+```{r}
+train_ts1 %>%
+  model(
+    classical_decomposition(no_of_applicants, type = "additive")
+  ) %>%
+  components() %>%
+  autoplot() +
+  labs(title = "Classical additive decomposition of Number of applicants : Segment 1")
+```
+
+STL Decomposition
+```{r}
+#STL decomposition for 7 periods
+train_ts1 %>%
+  model(
+    STL(no_of_applicants ~ trend(window = 7) +
+                   season(window = "periodic"),
+    robust = TRUE)) %>%
+  components() %>%
+  autoplot()
+
+#STL decomposition for 30 periods
+train_ts1 %>%
+  model(
+    STL(no_of_applicants ~ trend(window = 30) +
+                   season(window = "periodic"),
+    robust = TRUE)) %>%
+  components() %>%
+  autoplot()
+
+# There is a minor difference between the two decompositions. The 30 days trend is much smoother than the 7 days trend.
+```
+
+Moving average smoothing
+```{r}
+ma_seg1 <- train_ts1 %>% mutate(`5-MA` = slider::slide_dbl(no_of_applicants, mean,
+                .before = 2, .after = 2, .complete = TRUE)
+  )
+ma_seg1 %>%
+  autoplot(no_of_applicants) +
+  geom_line(aes(y = `5-MA`), colour = "#D55E00") +
+  labs(y = "Number of Applicants",
+       title = "Moving Average Smoothing : Segment 1") +
+  guides(colour = guide_legend(title = "series"))
+```
+The trend-cycle (in orange) is marginally smoother than the original data and captures the main movement of the time series. However, it is pretty similar to the original data.Hence Moving average smoothing is as not as non-effective.
+
+
+## Modelling of segment 1 data
+
+
+Preparing the test and train datasets for segment 1 for modelling
+```{r}
+# The dataset is being divided into 70:30 ratio
+no_of_train_records1=round(.70*nrow(train_ts1))
+no_of_test_records1=nrow(train_ts1)-no_of_train_records1
+
+train_seg1 <- train_ts1[0:no_of_train_records1,]
+test_seg1 <- train_ts1[no_of_train_records1+1: nrow(train_ts1),]
+```
+
+
+Box-Cox tranformation of Segment 1 data
+```{r}
+
+lambda <- train_ts1 %>%
+  features(no_of_applicants, features = guerrero) %>%
+  pull(lambda_guerrero)
+train_ts1 %>%
+  autoplot(box_cox(no_of_applicants, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Box-Cox transformed No of applicants with $\\lambda$ = ",
+         round(lambda,2))))
+```
+
+Box-Cox modelling and forecasting using Seasonal Naive and Seasonal ARIMA
+```{r}
+lambda <- train_seg1 %>%
+  features(no_of_applicants, features = guerrero) %>%
+  pull(lambda_guerrero)
+lambda
+box_cox(train_seg1$no_of_applicants, lambda)->bcox
+test <- train_seg1
+test$no_of_applicants=bcox
+
+#FORECASTING USING BOX-COX USING SNAIVE METHOD
+test_seasonal_naive_fit  <- test %>% model (`Seasonal naïve` = SNAIVE(no_of_applicants))
+test_seasonal_naive_fc <- test_seasonal_naive_fit %>% forecast(h = no_of_test_records1)
+test_seasonal_naive_fc %>% autoplot( level = NULL) + autolayer( filter_index(test, ~ .), colour = "black") + labs(y = "Number of Applicants", title = "Forecasts for daily number of applicants : Seasonal Naive" ) + guides(colour = guide_legend(title = "Forecast"))
+test %>% model(SNAIVE(no_of_applicants)) %>% gg_tsresiduals()
+test_seasonal_naive_fc
+
+test_seasonal_naive_fc = rename(test_seasonal_naive_fc, ds = date)
+test_seasonal_naive_fc = rename(test_seasonal_naive_fc, yhat = .mean)
+# inverting box-cox transformation
+inverse_forecast1 <- test_seasonal_naive_fc
+inverse_forecast1 <- column_to_rownames(inverse_forecast1, var = "ds")
+inverse_forecast1$yhat_untransformed = InvBoxCox(test_seasonal_naive_fc$yhat, lambda)
+inverse_forecast1
+
+#conversion of forecast into time series and plotting it
+tdf <- data.frame(test_seasonal_naive_fc$ds, inverse_forecast1$yhat_untransformed)
+colnames(tdf) <- c("date", "no_of_applicants")
+tdf %>% mutate(date = as_date(date)) %>% as_tsibble(index = date) -> tdf
+autoplot(tdf)
+tds = train_seg1
+rbind(tds, tdf) %>% autoplot()
+
+MAPE_boxcox_snaive1 <- sum(abs(tail(train_ts1,no_of_test_records1)[,2]-tdf$no_of_applicants)/abs(tail(train_ts1,no_of_test_records1)[,2])) /no_of_test_records1 * 100
+print(paste("MAPE for Boxcox SNaive model is", MAPE_boxcox_snaive1))
+
+
+#FORECASTING USING BOX-COX USING ARIMA METHOD
+fit <- test %>%
+  model(ARIMA(no_of_applicants))
+report(fit)
+
+fit %>% forecast(h=no_of_test_records1) -> test_arima_fc
+test_arima_fc %>%  autoplot(train_ts1) +
+  labs(y = "Number of Applicants", title = "ARIMA forecast : Segment 1")
+test_arima_fc
+
+test_arima_fc = rename(test_arima_fc, ds = date)
+test_arima_fc = rename(test_arima_fc, yhat = .mean)
+# inverting box-cox transformation
+inverse_forecast_arima1 <- test_arima_fc
+inverse_forecast_arima1 <- column_to_rownames(inverse_forecast_arima1, var = "ds")
+inverse_forecast_arima1$yhat_untransformed = InvBoxCox(test_arima_fc$yhat, lambda)
+inverse_forecast_arima1
+
+#conversion of forecast into time series and plotting it
+tda <- data.frame(test_arima_fc$ds, inverse_forecast_arima1$yhat_untransformed)
+colnames(tda) <- c("date", "no_of_applicants")
+tda %>% mutate(date = as_date(date)) %>% as_tsibble(index = date) -> tda
+autoplot(tda)
+tdb = train_seg1
+rbind(tdb, tda) %>% autoplot()
+
+MAPE_boxcox_arima1 <- sum(abs(tail(train_ts1,no_of_test_records1)[,2]-tda$no_of_applicants)/abs(tail(train_ts1,no_of_test_records1)[,2])) /no_of_test_records1 * 100
+print(paste("MAPE for Boxcox ARIMA model is", MAPE_boxcox_arima1))
+```
+
+Modelling and forecasting using TSLM Model
+```{r}
+# Modelling and forecasting using TSLM Method
+s1_tslm_fit <- train_seg1 %>% model (trend_model = TSLM(no_of_applicants ~ trend()))
+s1_tslm_fc <- s1_tslm_fit %>% forecast(h = no_of_test_records1)
+s1_tslm_fc %>% autoplot(level = NULL) + autolayer( filter_index(train_ts1, ~ .), colour = "black") + labs(y = "Number of Applicants", title = "Forecasts for daily number of applicants : Mean") + guides(colour = guide_legend(title = "Forecast"))
+train_ts1 %>% model(TSLM(no_of_applicants ~ trend())) %>% gg_tsresiduals()
+
+MAPE_tslm1 <- sum(abs(tail(train_ts1,no_of_test_records1)[,2]-s1_tslm_fc$.mean)/abs(tail(train_ts1,no_of_test_records1)[,2])) /no_of_test_records1 * 100
+print(paste("MAPE for Mean model is", MAPE_tslm1))
+```
+
+Modelling and forecasting using Mean Method
+```{r}
+s1_mean_fit <- train_seg1 %>% model (Mean = MEAN(no_of_applicants))
+s1_mean_fc <- s1_mean_fit %>% forecast(h = no_of_test_records1)
+s1_mean_fc %>% autoplot(level = NULL) + autolayer( filter_index(train_ts1, ~ .), colour = "black") + labs(y = "Number of Applicants", title = "Forecasts for daily number of applicants : Mean") + guides(colour = guide_legend(title = "Forecast"))
+train_ts1 %>% model(MEAN(no_of_applicants)) %>% gg_tsresiduals()
+
+MAPE_mean1 <- sum(abs(tail(train_ts1,no_of_test_records1)[,2]-s1_mean_fc$.mean)/abs(tail(train_ts1,no_of_test_records1)[,2])) /no_of_test_records1 * 100
+print(paste("MAPE for Mean model is", MAPE_mean1))
+```
+
+Modelling and forecasting using Naive Method
+```{r}
+s1_naive_fit <- train_seg1 %>% model (`Naïve` = NAIVE(no_of_applicants))
+s1_naive_fc <- s1_naive_fit %>% forecast(h = no_of_test_records1)
+s1_naive_fc %>% autoplot( level = NULL) + autolayer( filter_index(train_ts1, ~ .), colour = "black") + labs(y = "Number of Applicants", title = "Forecasts for daily number of applicants : Naive" ) + guides(colour = guide_legend(title = "Forecast"))
+train_ts1 %>% model(NAIVE(no_of_applicants)) %>% gg_tsresiduals()
+
+MAPE_Naive1 <- sum(abs(tail(train_ts1,no_of_test_records1)[,2]-s1_naive_fc$.mean)/abs(tail(train_ts1,no_of_test_records1)[,2])) /no_of_test_records1 * 100
+print(paste("MAPE for Naive model is", MAPE_Naive1))
+```
+
+Modelling and forecasting using Seasonal Naive Method
+```{r}
+s1_seasonal_naive_fit  <- train_seg1 %>% model (`Seasonal naïve` = SNAIVE(no_of_applicants))
+s1_seasonal_naive_fc <- s1_seasonal_naive_fit %>% forecast(h = no_of_test_records1)
+s1_seasonal_naive_fc %>% autoplot( level = NULL) + autolayer( filter_index(train_ts1, ~ .), colour = "black") + labs(y = "Number of Applicants", title = "Forecasts for daily number of applicants : Seasonal Naive" ) + guides(colour = guide_legend(title = "Forecast"))
+train_ts1 %>% model(SNAIVE(no_of_applicants)) %>% gg_tsresiduals()
+
+MAPE_SNaive1 <- sum(abs(tail(train_ts1,no_of_test_records1)[,2]-s1_seasonal_naive_fc$.mean)/abs(tail(train_ts1,no_of_test_records1)[,2])) /no_of_test_records1 * 100
+print(paste("MAPE for SNaive model is", MAPE_SNaive1))
+```
+
+Modelling and forecasting using decomposition and Seasonal Naive
+```{r}
+dcmp1 <- train_seg1 %>%
+  model(STL(no_of_applicants ~ trend(window = 1), robust = TRUE)) %>%
+  components() %>%
+  dplyr::select(-.model)
+
+dcmp1 %>%
+  model(SNAIVE(season_adjust)) %>%
+  forecast(h=no_of_test_records1) -> dcmp_fcst1
+
+dcmp_fcst1 %>%
+  autoplot(dcmp1) +
+  labs(y = "Number of applicants",
+       title = "Segment 1")
+
+dcmp_fcst1
+
+MAPE_Dcmp_SNaive1 <- sum(abs(tail(train_ts1,no_of_test_records1)[,2]-dcmp_fcst1$.mean)/abs(tail(train_ts1,no_of_test_records1)[,2])) /no_of_test_records1 * 100
+print(paste("MAPE for Decomposition SNaive model is", MAPE_Dcmp_SNaive1))
+```
+
+Modelling and forecasting using Seasonal ARIMA
+```{r}
+# Forecasting using ARIMA
+fit <- train_seg1 %>%
+  model(ARIMA(no_of_applicants))
+report(fit)
+# This is seasonal ARIMA model
+
+fit %>% forecast(h=no_of_test_records1) -> Arima_seg1_fc
+Arima_seg1_fc %>%  autoplot(train_ts1) +
+  labs(y = "Number of Applicants", title = "ARIMA forecast : Segment 1")
+Arima_seg1_fc
+
+MAPE_Arima1 <- sum(abs(tail(train_ts1,no_of_test_records1)[,2]-Arima_seg1_fc$.mean)/abs(tail(train_ts1,no_of_test_records1)[,2])) /no_of_test_records1 * 100
+print(paste("MAPE for ARIMA model is", MAPE_Arima1))
+```
+
+Comparison of the various MAPE values for the models is as given below :-
+
+1.    ARIMA method                                        -   61.51
+2.    Box-Cox transformation followed by ARIMA            -   64.22
+3.    Box-Cox transformation followed by Seasonal Naive   -   64.04
+4.    Decomposition followed by Seasonal Naive            -   74.02
+5.    Mean model                                          -   58.37
+6.    Naive model                                         -   111.94
+7.    Seasonal Naive Model                                -   64.04
+8.    TSLM                                                -   72.82
+
+
+
+# SEGMENT 2
+
+
+## Visualisation of segment2 data
+```{r}
+train_ts2 %>% autoplot()
+
+train_ts2 %>% gg_season(no_of_applicants, period="year", labels = "both") +
+  labs(y = "no of applicants",
+       title = "Seasonal plot: Segment 2")
+
+train_ts2 %>% gg_subseries(no_of_applicants) +
+  labs(y = "no of applicants",
+       title = "Seasonal plot: Segment 2")
+```
+
+
+Time series components : STL decomposition
+```{r}
+# Times series decomposition using Loess
+dcmp <- train_ts2 %>%
+  model(stl = STL(no_of_applicants))
+components(dcmp)
+
+# Visualisation of the overall movement of the series ignoring any seasonality and fluctuations
+components(dcmp) %>%
+  as_tsibble() %>%
+  autoplot(no_of_applicants, colour="gray") +
+  geom_line(aes(y=trend), colour = "#D55E00") +
+  labs(
+    y = "No of applicants",
+    title = "Total no of applicants"
+  )
+
+#Plotting all of the components in a single figure
+components(dcmp) %>% autoplot()
+
+# Seasonally adjusted decomposition
+components(dcmp) %>%
+  as_tsibble() %>%
+  autoplot(no_of_applicants, colour = "gray") +
+  geom_line(aes(y=season_adjust), colour = "#0072B2") +
+  labs(y = "No of Applicants)",
+       title = "Number of applicants : Segment 2")
+#The original data is in grey and the seasonally adjusted no of applicants data is in blue.
+```
+
+
+Additive decomposition
+```{r}
+train_ts2 %>%
+  model(
+    classical_decomposition(no_of_applicants, type = "additive")
+  ) %>%
+  components() %>%
+  autoplot() +
+  labs(title = "Classical additive decomposition of Number of applicants : Segment 2")
+```
+
+STL Decomposition
+```{r}
+#STL decomposition for 7 periods
+train_ts2 %>%
+  model(
+    STL(no_of_applicants ~ trend(window = 7) +
+                   season(window = "periodic"),
+    robust = TRUE)) %>%
+  components() %>%
+  autoplot()
+
+#STL decomposition for 30 periods
+train_ts2 %>%
+  model(
+    STL(no_of_applicants ~ trend(window = 30) +
+                   season(window = "periodic"),
+    robust = TRUE)) %>%
+  components() %>%
+  autoplot()
+
+# There is a minor difference between the two decompositions. The 30 days decomposition is smoother.
+```
+
+
+Moving average smoothing
+```{r}
+ma_seg2 <- train_ts2 %>% mutate(`5-MA` = slider::slide_dbl(no_of_applicants, mean,
+                .before = 2, .after = 2, .complete = TRUE)
+  )
+ma_seg2 %>%
+  autoplot(no_of_applicants) +
+  geom_line(aes(y = `5-MA`), colour = "#D55E00") +
+  labs(y = "Number of Applicants",
+       title = "Moving Average Smoothing : Segment 2") +
+  guides(colour = guide_legend(title = "series"))
+```
+The trend-cycle (in orange) is marginally smoother than the original data and captures the main movement of the time series. However, it is pretty similar to the original data.Hence Moving average smoothing is as not as non-effective.
+
+
+## Modelling of segment 1 data
+
+Preparing the test and train datasets for segment 2 for modelling
+```{r}
+no_of_train_records=round(.70*nrow(train_ts2))
+no_of_test_records=nrow(train_ts2)-no_of_train_records
+# Now Selecting 70% of data as sample from total 'n' rows of the data  
+train_seg2 <- train_ts2[0:no_of_train_records,]
+test_seg2 <- train_ts2[no_of_train_records+1: nrow(train_ts2),]
+```
+
+
+Box-Cox tranformation of Segment 2 data
+```{r}
+
+lambda <- train_ts2 %>%
+  features(no_of_applicants, features = guerrero) %>%
+  pull(lambda_guerrero)
+train_ts2 %>%
+  autoplot(box_cox(no_of_applicants, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Box-Cox transformed No of applicants with $\\lambda$ = ",
+         round(lambda,2))))
+```
+Box-Cox modelling and forecasting using Seasonal Naive and Seasonal ARIMA
+```{r}
+lambda <- train_seg2 %>%
+  features(no_of_applicants, features = guerrero) %>%
+  pull(lambda_guerrero)
+lambda
+box_cox(train_seg2$no_of_applicants, lambda)->bcox
+test <- train_seg2
+test$no_of_applicants=bcox
+
+#FORECASTING USING BOX-COX USING SNAIVE METHOD
+test_seasonal_naive_fit  <- test %>% model (`Seasonal naïve` = SNAIVE(no_of_applicants))
+test_seasonal_naive_fc <- test_seasonal_naive_fit %>% forecast(h = no_of_test_records)
+test_seasonal_naive_fc %>% autoplot( level = NULL) + autolayer( filter_index(test, ~ .), colour = "black") + labs(y = "Number of Applicants", title = "Forecasts for daily number of applicants : Seasonal Naive" ) + guides(colour = guide_legend(title = "Forecast"))
+test %>% model(SNAIVE(no_of_applicants)) %>% gg_tsresiduals()
+test_seasonal_naive_fc
+
+test_seasonal_naive_fc = rename(test_seasonal_naive_fc, ds = date)
+test_seasonal_naive_fc = rename(test_seasonal_naive_fc, yhat = .mean)
+# inverting box-cox transformation
+inverse_forecast <- test_seasonal_naive_fc
+inverse_forecast <- column_to_rownames(inverse_forecast, var = "ds")
+inverse_forecast$yhat_untransformed = InvBoxCox(test_seasonal_naive_fc$yhat, lambda)
+inverse_forecast
+
+#conversion of forecast into time series and plotting it
+tdf <- data.frame(test_seasonal_naive_fc$ds, inverse_forecast$yhat_untransformed)
+colnames(tdf) <- c("date", "no_of_applicants")
+tdf %>% mutate(date = as_date(date)) %>% as_tsibble(index = date) -> tdf
+autoplot(tdf)
+tds = train_seg2
+rbind(tds, tdf) %>% autoplot()
+
+MAPE_boxcox_snaive <- sum(abs(tail(train_ts2,no_of_test_records)[,2]-tdf$no_of_applicants)/abs(tail(train_ts2,no_of_test_records)[,2])) /no_of_test_records * 100
+print(paste("MAPE for Boxcox SNaive model is", MAPE_boxcox_snaive))
+
+
+#FORECASTING USING BOX-COX USING ARIMA METHOD
+fit <- test %>%
+  model(ARIMA(no_of_applicants))
+report(fit)
+
+fit %>% forecast(h=no_of_test_records) -> test_arima_fc
+test_arima_fc %>%  autoplot(train_ts2) +
+  labs(y = "Number of Applicants", title = "ARIMA forecast : Segment 2")
+test_arima_fc
+
+test_arima_fc = rename(test_arima_fc, ds = date)
+test_arima_fc = rename(test_arima_fc, yhat = .mean)
+# inverting box-cox transformation
+inverse_forecast_arima <- test_arima_fc
+inverse_forecast_arima <- column_to_rownames(inverse_forecast_arima, var = "ds")
+inverse_forecast_arima$yhat_untransformed = InvBoxCox(test_arima_fc$yhat, lambda)
+inverse_forecast_arima
+
+#conversion of forecast into time series and plotting it
+tda <- data.frame(test_arima_fc$ds, inverse_forecast_arima$yhat_untransformed)
+colnames(tda) <- c("date", "no_of_applicants")
+tda %>% mutate(date = as_date(date)) %>% as_tsibble(index = date) -> tda
+autoplot(tda)
+tdb = train_seg2
+rbind(tdb, tda) %>% autoplot()
+
+MAPE_boxcox_arima <- sum(abs(tail(train_ts2,no_of_test_records)[,2]-tda$no_of_applicants)/abs(tail(train_ts2,no_of_test_records)[,2])) /no_of_test_records * 100
+print(paste("MAPE for Boxcox ARIMA model is", MAPE_boxcox_arima))
+```
+
+Modelling and forecasting using TSLM Model
+```{r}
+# Modelling and forecasting using TSLM Method
+s2_tslm_fit <- train_seg2 %>% model (trend_model = TSLM(no_of_applicants ~ trend()))
+s2_tslm_fc <- s2_tslm_fit %>% forecast(h = no_of_test_records)
+s2_tslm_fc %>% autoplot(level = NULL) + autolayer( filter_index(train_ts2, ~ .), colour = "black") + labs(y = "Number of Applicants", title = "Forecasts for daily number of applicants : Mean") + guides(colour = guide_legend(title = "Forecast"))
+train_ts2 %>% model(TSLM(no_of_applicants ~ trend())) %>% gg_tsresiduals()
+
+MAPE_tslm <- sum(abs(tail(train_ts2,no_of_test_records)[,2]-s2_tslm_fc$.mean)/abs(tail(train_ts2,no_of_test_records)[,2])) /no_of_test_records * 100
+print(paste("MAPE for Mean model is", MAPE_tslm))
+```
+
+Modelling and forecasting using Mean Method
+```{r}
+s2_mean_fit <- train_seg2 %>% model (Mean = MEAN(no_of_applicants))
+s2_mean_fc <- s2_mean_fit %>% forecast(h = no_of_test_records)
+s2_mean_fc %>% autoplot(level = NULL) + autolayer( filter_index(train_ts2, ~ .), colour = "black") + labs(y = "Number of Applicants", title = "Forecasts for daily number of applicants : Mean") + guides(colour = guide_legend(title = "Forecast"))
+train_ts2 %>% model(MEAN(no_of_applicants)) %>% gg_tsresiduals()
+
+MAPE_mean <- sum(abs(tail(train_ts2,no_of_test_records)[,2]-s2_mean_fc$.mean)/abs(tail(train_ts2,no_of_test_records)[,2])) /no_of_test_records * 100
+print(paste("MAPE for Mean model is", MAPE_mean))
+```
+
+Modelling and forecasting using Naive Method
+```{r}
+s2_naive_fit <- train_seg2 %>% model (`Naïve` = NAIVE(no_of_applicants))
+s2_naive_fc <- s2_naive_fit %>% forecast(h = no_of_test_records)
+s2_naive_fc %>% autoplot( level = NULL) + autolayer( filter_index(train_ts2, ~ .), colour = "black") + labs(y = "Number of Applicants", title = "Forecasts for daily number of applicants : Naive" ) + guides(colour = guide_legend(title = "Forecast"))
+train_ts2 %>% model(NAIVE(no_of_applicants)) %>% gg_tsresiduals()
+
+MAPE_Naive <- sum(abs(tail(train_ts2,no_of_test_records)[,2]-s2_naive_fc$.mean)/abs(tail(train_ts2,no_of_test_records)[,2])) /no_of_test_records * 100
+print(paste("MAPE for Naive model is", MAPE_Naive))
+```
+
+Modelling and forecasting using Seasonal Naive Method
+```{r}
+s2_seasonal_naive_fit  <- train_seg2 %>% model (`Seasonal naïve` = SNAIVE(no_of_applicants))
+s2_seasonal_naive_fc <- s2_seasonal_naive_fit %>% forecast(h = no_of_test_records)
+s2_seasonal_naive_fc %>% autoplot( level = NULL) + autolayer( filter_index(train_ts2, ~ .), colour = "black") + labs(y = "Number of Applicants", title = "Forecasts for daily number of applicants : Seasonal Naive" ) + guides(colour = guide_legend(title = "Forecast"))
+train_ts2 %>% model(SNAIVE(no_of_applicants)) %>% gg_tsresiduals()
+
+MAPE_SNaive <- sum(abs(tail(train_ts2,no_of_test_records)[,2]-s2_seasonal_naive_fc$.mean)/abs(tail(train_ts2,no_of_test_records)[,2])) /no_of_test_records * 100
+print(paste("MAPE for SNaive model is", MAPE_SNaive))
+```
+
+Modelling and forecasting using decomposition and Seasonal Naive
+```{r}
+dcmp <- train_seg2 %>%
+  model(STL(no_of_applicants ~ trend(window = 1), robust = TRUE)) %>%
+  components() %>%
+  dplyr::select(-.model)
+
+dcmp %>%
+  model(SNAIVE(season_adjust)) %>%
+  forecast(h=no_of_test_records) -> dcmp_fcst
+
+dcmp_fcst %>%
+  autoplot(dcmp) +
+  labs(y = "Number of applicants",
+       title = "Segment 2")
+
+dcmp_fcst
+
+MAPE_Dcmp_SNaive <- sum(abs(tail(train_ts2,no_of_test_records)[,2]-dcmp_fcst$.mean)/abs(tail(train_ts2,no_of_test_records)[,2])) /no_of_test_records * 100
+print(paste("MAPE for Decomposition SNaive model is", MAPE_Dcmp_SNaive))
+```
+
+Modelling and forecasting using Seasonal ARIMA
+```{r}
+# Forecasting using ARIMA
+fit <- train_seg2 %>%
+  model(ARIMA(no_of_applicants))
+report(fit)
+# This is seasonal ARIMA model
+
+fit %>% forecast(h=no_of_test_records) -> Arima_seg2_fc
+Arima_seg2_fc %>%  autoplot(train_ts2) +
+  labs(y = "Number of Applicants", title = "ARIMA forecast : Segment 2")
+Arima_seg2_fc
+
+MAPE_Arima <- sum(abs(tail(train_ts2,no_of_test_records)[,2]-Arima_seg2_fc$.mean)/abs(tail(train_ts2,no_of_test_records)[,2])) /no_of_test_records * 100
+print(paste("MAPE for ARIMA model is", MAPE_Arima))
+```
+
+
+Comparison of the various MAPE values for the models is as given below :-
+
+1.    ARIMA method                                        -   190.47
+2.    Box-Cox transformation followed by ARIMA            -   198.68
+3.    Box-Cox transformation followed by Seasonal Naive   -   160.44
+4.    Decomposition followed by Seasonal Naive            -   164.01
+5.    Mean model                                          -   118.46
+6.    Naive model                                         -   229.14
+7.    Seasonal Naive Model                                -   160.44
+8.    TSLM                                                -   209.17
+
+
+# Neural Network Model (NNAR)
+
+```{r}
+
+# Converting segment 1 raw data into averaged figures
+raw_train %>% dplyr::filter(segment==1) %>%  dplyr::select (-c(branch_id,zone,state, segment))-> train_s1
+aggregate(train_s1$no_of_applicants, list(dmy(train_s1$application_date)), FUN=mean) -> train_s1_consol
+colnames(train_s1_consol) <- c("date", "no_of_applicants")
+train_s1_consol %>% mutate(date = as_date(date)) %>% as_tsibble(index = date) -> train_ts1
+train_ts1
+
+# Converting segment 2 raw data into averaged figures
+raw_train %>% dplyr::filter(segment==2) %>%  dplyr::select (-c(branch_id,zone, segment))-> train_s2
+aggregate(train_s2$no_of_applicants, list(dmy(train_s2$application_date)), FUN=mean) -> train_s2_consol
+colnames(train_s2_consol) <- c("date", "no_of_applicants")
+train_s2_consol %>% mutate(date = as_date(date)) %>% as_tsibble(index = date) -> train_ts2
+train_ts2
+
+```
+
+
+### Carrying out STL decomposition
+```{r}
+#Segment 1
+# Times series decomposition using Loess
+train_ts1 <- tsibble::fill_gaps(train_ts1,no_of_applicants=0L)
+dcmp_1 <- train_ts1 %>%
+  model(stl = STL(no_of_applicants))
+
+components(dcmp_1) %>%
+  as_tsibble() %>%
+  autoplot(no_of_applicants, colour="gray") +
+  geom_line(aes(y=trend), colour = "red") +
+  labs(
+    y = "No of applicants :  Segment 1",
+    title = "Total no of applicants"
+  )
+
+#Plotting all of the components in a single figure
+components(dcmp_1) %>% autoplot()
+
+components(dcmp_1) %>%
+  as_tsibble() %>%
+  autoplot(no_of_applicants, colour = "gray") +
+  geom_line(aes(y=season_adjust), colour = "red") +
+  labs(y = "No of Applicants)",
+       title = "Number of applicants : Segment 1")
+
+#Segment 2
+# Times series decomposition using Loess
+dcmp_2 <- train_ts2 %>%
+  model(stl = STL(no_of_applicants))
+components(dcmp_2) %>%
+  as_tsibble() %>%
+  autoplot(no_of_applicants, colour="gray") +
+  geom_line(aes(y=trend), colour = "red") +
+  labs(
+    y = "No of applicants :  Segment 2",
+    title = "Total no of applicants"
+  )
+
+#Plotting all of the components in a single figure
+components(dcmp_2) %>% autoplot()
+
+components(dcmp_2) %>%
+  as_tsibble() %>%
+  autoplot(no_of_applicants, colour = "gray") +
+  geom_line(aes(y=season_adjust), colour = "red") +
+  labs(y = "No of Applicants)",
+       title = "Number of applicants : Segment 2")
+```
+
+```{r}
+seg_1_ts1 <- ts(components(dcmp_1)$season_adjust, start=c(2017,04,01), end=c(2019,06,05),frequency = 365)
+seg_2_ts2 <- ts(components(dcmp_2)$season_adjust, start =c(2017,04,01), end =c(2019,06,23),frequency=365)
+
+```
+
+
+### Fitting of Neural Network Model
+```{r}
+fit <- nnetar(seg_1_ts1, decay=0.5, maxit=30)
+plot(forecast(fit))
+lines(lynx)
+```
+
+```{r}
+ts_seg1 <- nnetar(y=seg_1_ts1, order = c(1,0,1))
+plot(forecast(ts_seg1))
+pr_data1 = data.frame(forecast(ts_seg1,h=30))
+ts_seg2 <- nnetar(y=seg_2_ts2, order = c(1,0,1))
+plot(forecast(ts_seg2))
+pr_data2 = data.frame(forecast(ts_seg2,h=30))
+```
+
+
+
+Writing data to excel sheet
+```{r}
+df_s <- data.frame(id = c(1:60),
+                 no_of_applicants = c(abs(pr_data1$Point.Forecast), abs(pr_data2$Point.Forecast)))
+
+write_csv(df_s, "C:\\MSc (BDA)\\BD3P5 Econometrics lab test\\sjcbusinessforecasting\\sample_submission.csv")
+```
+
+
+
