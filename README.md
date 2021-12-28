@@ -1,5 +1,5 @@
 # Econometrics-Lab
-The code of the R program done for Econometrics lab test.
+The code of the R program done for Econometrics lab test - BD3P5 conducted by Akhileshwar in MSc(BDA) program 3rd semester.
 Team members
 20BDA01 - Tashi Chotso 
 20BDA06 - Sarah Merin John 
